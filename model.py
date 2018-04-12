@@ -2,8 +2,22 @@ import torch
 import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
+from embed_regularize import embedded_dropout
 from utils import to_variable, to_tensor
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
+
+
+class LockedDropout(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, inp, dropout=0.65):
+        if not self.training:
+            return inp
+        tensor_mask = inp.data.new(1, inp.size(1), inp.size(2)).bernoulli_(1 - dropout)
+        var_mask = torch.autograd.Variable(tensor_mask, requires_grad=False) / (1 - dropout)
+        var_mask = var_mask.expand_as(inp)
+        return var_mask * inp
 
 
 class LAS(nn.Module):
@@ -15,6 +29,7 @@ class LAS(nn.Module):
         self.max_seq_len = max_seq_len
         self.output_size = output_size
         self.drop_out = nn.Dropout(0.4)
+        self.locked_dropout = LockedDropout()
         self.cnn_encoder = CNN_Encoder(params.embedding_dimension)
         self.encoder = Encoder(params)      #pBilstm
         self.decoder = Decoder(params, output_size)
@@ -29,6 +44,7 @@ class LAS(nn.Module):
 
     def forward(self, input, input_len, label=None, label_len=None):
         input = self.cnn_encoder(input)
+        input = self.locked_dropout(input, 0.65)
         keys, values = self.encoder(input, input_len)
         if label is None:
             # During decoding of test data
@@ -70,6 +86,7 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
         self.hidden_size = params.hidden_dimension
         self.embedding_dim = params.embedding_dimension
+        self.locked_dropout = LockedDropout()
         self.n_layers = params.n_layers
         self.lstms = nn.ModuleList([
             nn.LSTM(input_size=params.embedding_dimension, hidden_size=params.hidden_dimension, bidirectional=True),
@@ -101,6 +118,7 @@ class Encoder(nn.Module):
             packed_h = pack_padded_sequence(h, input_len.cpu().numpy())
             h, _ = lstm(packed_h)
             h, _ = pad_packed_sequence(h)      # seq_len * bs * (2 * hidden_dim)
+            h = self.locked_dropout(h, 0.3)
             # Summing forward and backward representation
             h = h.view(h.size(0), h.size(1), 2, -1).sum(2).view(h.size(0), h.size(1), -1) / 2       # h = ( h_forward + h_backward ) / 2
 
@@ -146,7 +164,9 @@ class Decoder(nn.Module):
 
     def forward(self, keys, values, label, label_len):
         # Number of characters in the transcript
-        embed = self.embed(label)          # bs * label_len * 256
+        #embed = self.embed(label)          # bs * label_len * 256
+        embed = embedded_dropout(self.encoder, input, dropout=0.1 if self.training else 0)
+        embed = self.locked_dropout(embed, 0.65)
         output = to_variable(torch.zeros(label_len.max() - 1, embed.size(0), self.vocab))
         hidden = self.init_hidden(embed.size(0))
         context = to_variable(torch.zeros(embed.size(0), self.hidden_size), requires_grad=True)             # Initial context

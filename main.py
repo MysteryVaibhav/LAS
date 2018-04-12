@@ -12,12 +12,12 @@ def parse_arguments():
     parser.add_argument("--data_dir", dest="data_dir", type=str, default="C:\\Users\\myste\\Downloads\\")
 
     parser.add_argument("--hidden_dimension", dest="hidden_dimension", type=int, default=512)
-    parser.add_argument("--embedding_dimension", dest="embedding_dimension", type=int, default=256)
+    parser.add_argument("--embedding_dimension", dest="embedding_dimension", type=int, default=512)
     parser.add_argument("--n_layers", dest="n_layers", type=int, default=1)
 
     parser.add_argument("--batch_size", dest="batch_size", type=int, default=32)
     parser.add_argument("--learning_rate", dest="learning_rate", type=float, default=0.001)
-    parser.add_argument("--num_epochs", dest="num_epochs", type=int, default=1)
+    parser.add_argument("--num_epochs", dest="num_epochs", type=int, default=5)
     parser.add_argument("--clip_value", dest="clip_value", type=float, default=0)
     parser.add_argument("--learning_anneal", dest="learning_anneal", type=float, default=0.98)
     parser.add_argument("--wdecay", dest="wdecay", type=float, default=0.00001)
