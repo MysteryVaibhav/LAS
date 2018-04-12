@@ -8,11 +8,11 @@ from trainer import Trainer
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
-        description='Argument Parser for m-DAN')
+        description='Argument Parser for LAS')
     parser.add_argument("--data_dir", dest="data_dir", type=str, default="C:\\Users\\myste\\Downloads\\")
 
-    parser.add_argument("--hidden_dimension", dest="hidden_dimension", type=int, default=256)
-    parser.add_argument("--embedding_dimension", dest="embedding_dimension", type=int, default=40)
+    parser.add_argument("--hidden_dimension", dest="hidden_dimension", type=int, default=512)
+    parser.add_argument("--embedding_dimension", dest="embedding_dimension", type=int, default=256)
     parser.add_argument("--n_layers", dest="n_layers", type=int, default=1)
 
     parser.add_argument("--batch_size", dest="batch_size", type=int, default=32)

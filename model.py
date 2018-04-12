@@ -15,6 +15,7 @@ class LAS(nn.Module):
         self.max_seq_len = max_seq_len
         self.output_size = output_size
         self.drop_out = nn.Dropout(0.4)
+        self.cnn_encoder = CNN_Encoder(params.embedding_dimension)
         self.encoder = Encoder(params)      #pBilstm
         self.decoder = Decoder(params, output_size)
         self.init_weights()
@@ -27,6 +28,7 @@ class LAS(nn.Module):
         #self.decoder.weight.data.uniform_(-init_range, init_range)
 
     def forward(self, input, input_len, label=None, label_len=None):
+        input = self.cnn_encoder(input)
         keys, values = self.encoder(input, input_len)
         if label is None:
             # During decoding of test data
@@ -34,6 +36,29 @@ class LAS(nn.Module):
         else:
             # During training
             return self.decoder(keys, values, label, label_len)
+
+
+class CNN_Encoder(nn.Module):
+    def __init__(self, embedding_dim):
+        super(CNN_Encoder, self).__init__()
+        self.layers = nn.ModuleList([
+            nn.Conv1d(in_channels=40, out_channels=128, kernel_size=3, padding=1),  # Mini-batch * 128 * len
+            nn.Hardtanh(0, 20, inplace=True),
+            #nn.LeakyReLU(),
+            nn.Dropout(0.3),
+            nn.Conv1d(in_channels=128, out_channels=256, kernel_size=3, padding=1),  # Mini-batch * 256 * len
+            nn.BatchNorm1d(256),
+            nn.Hardtanh(0, 20, inplace=True),
+            #nn.LeakyReLU(),
+            nn.Dropout(0.3),
+            nn.Conv1d(in_channels=256, out_channels=embedding_dim, kernel_size=3, padding=1),  # Mini-batch * 256 * len
+        ])
+
+    def forward(self, input):
+        h = input.permute(0, 2, 1)  # batch_size * C * length
+        for layer in self.layers:
+            h = layer(h)
+        return h.permute(0, 2, 1)   # reshaping it back
 
 
 class Encoder(nn.Module):
@@ -48,11 +73,11 @@ class Encoder(nn.Module):
         self.n_layers = params.n_layers
         self.lstms = nn.ModuleList([
             nn.LSTM(input_size=params.embedding_dimension, hidden_size=params.hidden_dimension, bidirectional=True),
-            nn.LSTM(input_size=2 * params.hidden_dimension, hidden_size=2 * params.hidden_dimension, bidirectional=True),
-            nn.LSTM(input_size=4 * params.hidden_dimension, hidden_size=4 * params.hidden_dimension, bidirectional=True),
-            nn.LSTM(input_size=8 * params.hidden_dimension, hidden_size=8 * params.hidden_dimension, bidirectional=True)])
-        self.linear_key = nn.Linear(in_features=8 * params.hidden_dimension, out_features=params.hidden_dimension)
-        self.linear_values = nn.Linear(in_features=8 * params.hidden_dimension, out_features=params.hidden_dimension)
+            nn.LSTM(input_size=params.hidden_dimension, hidden_size=params.hidden_dimension, bidirectional=True),
+            nn.LSTM(input_size=params.hidden_dimension, hidden_size=params.hidden_dimension, bidirectional=True),
+            nn.LSTM(input_size=params.hidden_dimension, hidden_size=params.hidden_dimension, bidirectional=True)])
+        self.linear_key = nn.Linear(in_features=params.hidden_dimension, out_features=params.hidden_dimension)
+        self.linear_values = nn.Linear(in_features=params.hidden_dimension, out_features=params.hidden_dimension)
 
     def forward(self, input, input_len):
         # TODO:Add some CNN layers later
@@ -62,11 +87,12 @@ class Encoder(nn.Module):
                 # After first lstm layer, pBiLSTM
                 seq_len = h.size(0)
                 if seq_len % 2 == 0:
-                    even_seq = to_variable(to_tensor(np.arange(0, seq_len, 2)).long())
-                    odd_seq = to_variable(to_tensor(np.arange(1, seq_len + 1, 2)).long())
-                    h_even = torch.index_select(h, dim=0, index=even_seq)
-                    h_odd = torch.index_select(h, dim=0, index=odd_seq)
-                    h = torch.cat((h_even, h_odd), dim=2)       # seq_len/2 * bs * (2^n * hidden_dim)
+                    #even_seq = to_variable(to_tensor(np.arange(0, seq_len, 2)).long())
+                    #odd_seq = to_variable(to_tensor(np.arange(1, seq_len + 1, 2)).long())
+                    #h_even = torch.index_select(h, dim=0, index=even_seq)
+                    #h_odd = torch.index_select(h, dim=0, index=odd_seq)
+                    #h = torch.cat((h_even, h_odd), dim=2)       # seq_len/2 * bs * (2^n * hidden_dim)
+                    h = h.view(h.size(0) // 2, h.size(1), 2, h.size(2)).sum(2) / 2
                     input_len /= 2
                 else:
                     print("Odd seq len should not occur!!")
