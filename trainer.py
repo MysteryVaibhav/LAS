@@ -75,7 +75,7 @@ class Trainer:
                 if val_loss < prev_best:
                     prev_best = val_loss
                     print("Validation loss decreased... saving weights !")
-                    torch.save(my_net.state_dict(), 'bestModelWeights_{:.2f}.t7'.format(val_loss))
+                    torch.save(my_net.state_dict(), self.params.model_dir+'\\bestModelWeights.t7')
                 else:
                     print("Validation loss didn't decrease... not saving !")
 
