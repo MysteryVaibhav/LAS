@@ -8,8 +8,8 @@ class DataLoader:
         self.params = params
 
         # Loading data
-        self.train = self.expand(np.load(params.data_dir + 'dev.npy'))
-        self.train_transcript = np.load(params.data_dir + 'dev_transcripts.npy')
+        self.train = self.expand(np.load(params.data_dir + 'train.npy'))
+        self.train_transcript = np.load(params.data_dir + 'train_transcripts.npy')
         self.val = self.expand(np.load(params.data_dir + 'dev.npy'))
         self.val_transcript = np.load(params.data_dir + 'dev_transcripts.npy')
         self.test = self.expand(np.load(params.data_dir + 'test.npy'))

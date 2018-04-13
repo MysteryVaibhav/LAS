@@ -9,7 +9,7 @@ from trainer import Trainer
 def parse_arguments():
     parser = argparse.ArgumentParser(
         description='Argument Parser for LAS')
-    parser.add_argument("--data_dir", dest="data_dir", type=str, default="C:\\Users\\myste\\Downloads\\")
+    parser.add_argument("--data_dir", dest="data_dir", type=str, default="")
 
     parser.add_argument("--hidden_dimension", dest="hidden_dimension", type=int, default=512)
     parser.add_argument("--embedding_dimension", dest="embedding_dimension", type=int, default=512)

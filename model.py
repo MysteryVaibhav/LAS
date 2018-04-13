@@ -165,8 +165,7 @@ class Decoder(nn.Module):
     def forward(self, keys, values, label, label_len):
         # Number of characters in the transcript
         #embed = self.embed(label)          # bs * label_len * 256
-        embed = embedded_dropout(self.encoder, input, dropout=0.1 if self.training else 0)
-        embed = self.locked_dropout(embed, 0.65)
+        embed = embedded_dropout(self.embed, label, dropout=0.1 if self.training else 0)
         output = to_variable(torch.zeros(label_len.max() - 1, embed.size(0), self.vocab))
         hidden = self.init_hidden(embed.size(0))
         context = to_variable(torch.zeros(embed.size(0), self.hidden_size), requires_grad=True)             # Initial context
