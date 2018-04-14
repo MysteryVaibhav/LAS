@@ -25,7 +25,7 @@ class DataLoader:
         self.val_label = self.char_to_int(self.val_transcript)
 
         # Setting pin memory and number of workers
-        kwargs = {'num_workers': 4, 'pin_memory': True} if torch.cuda.is_available() else {}
+        kwargs = {} if torch.cuda.is_available() else {}
 
         # Creating data loaders
         dataset_train = CustomDataSet(self.train, self.train_label, False)
