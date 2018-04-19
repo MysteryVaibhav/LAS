@@ -14,7 +14,7 @@ class Trainer:
 
     @staticmethod
     def init_xavier(m):
-        if type(m) == torch.nn.Conv1d:
+        if type(m) == torch.nn.Linear:
             fan_in = m.weight.size()[1]
             fan_out = m.weight.size()[0]
             std = np.sqrt(6.0 / (fan_in + fan_out))
@@ -41,7 +41,7 @@ class Trainer:
                     my_net.train()
                     label = to_variable(label)
                     prediction = my_net(to_variable(input_val), input_len, label, label_len)  # Feed forward
-
+                    
                     # Use prediction and compute the loss carefully
                     var_label_mask = to_variable(label_mask[:, 1:].contiguous().view(-1).nonzero().squeeze())
                     prediction = torch.index_select(prediction.contiguous().view(-1, len(self.data_loader.vocab)),

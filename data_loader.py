@@ -25,7 +25,7 @@ class DataLoader:
         self.val_label = self.char_to_int(self.val_transcript)
 
         # Setting pin memory and number of workers
-        kwargs = {} if torch.cuda.is_available() else {}
+        kwargs = {'num_workers': 4, 'pin_memory': True} if torch.cuda.is_available() else {}
 
         # Creating data loaders
         dataset_train = CustomDataSet(self.train, self.train_label, False)
@@ -99,7 +99,7 @@ class CustomDataSet(torch.utils.data.TensorDataset):
 
         i = 0
         for input in inputs:
-            padded_input[i][:len(input), :] = input
+            padded_input[i, :len(input), :] = input
             i += 1
 
         if self.is_test:
@@ -112,8 +112,8 @@ class CustomDataSet(torch.utils.data.TensorDataset):
         label_mask = np.zeros((len(batch), max_label_len))
         i = 0
         for input in labels:
-            padded_label[i][:len(input)] = input
-            label_mask[i][:len(input)] = 1
+            padded_label[i, :len(input)] = input
+            label_mask[i, :len(input)] = 1
             i += 1
 
         return to_tensor(padded_input), to_tensor(input_lens).int(), \
