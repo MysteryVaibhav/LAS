@@ -32,13 +32,27 @@ class Evaluator:
         file = open('submission.csv', 'w')
         file.write("Id,Predicted\n")
         for (input_val, input_len) in self.data_loader.test_data_loader:
-            output = my_net(to_variable(input_val), input_len)
+            output, raw_preds = my_net(to_variable(input_val), input_len)
+            output = self.get_best_out(output, raw_preds)
             pred = [self.data_loader.vocab[idx] for idx in output]
             pred = ''.join(pred)
             file.write("{},{}\n".format(i, pred))
             print("{},{}\n".format(i, pred))
             i += 1
         file.close()
+
+    def get_best_out(self, output, raw_preds):
+        loss_fn = torch.nn.CrossEntropyLoss()
+        if torch.cuda.is_available():
+            loss_fn = loss_fn.cuda()
+        best_loss = 1000
+        best_out = None
+        for i, each in enumerate(output):
+            loss = loss_fn(raw_preds[i], to_variable(to_tensor(np.array(each)).long())).data.cpu().numpy()[0]
+            if loss < best_loss:
+                best_loss = loss
+                best_out = each[:-1]
+        return best_out
 
 
 class Node:

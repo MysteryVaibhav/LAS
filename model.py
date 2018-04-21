@@ -206,62 +206,64 @@ class Decoder(nn.Module):
         :param values:
         :return: Returns the best decoded sentence
         """
-        bs = 1          # batch_size for decoding
+        bs = 1  # batch_size for decoding
         output = []
-        hidden_states = []
-        # Initial context
-        query = self.linear(self.lstm_cells[0].h0)  # bs * 256, This is the query
-        attn = torch.bmm(query.unsqueeze(1), keys.permute(0, 2, 1))  # bs * 1 * seq_len/8
-        attn = F.softmax(attn, dim=2)
-        context = torch.bmm(attn, values).squeeze(1)
+        raw_preds = []
 
-        h = self.embed(to_variable(torch.LongTensor([0])))      # Start token provided for generating the sentence
-        for i in range(self.max_decoding_length):
-            h = torch.cat((h, context), dim=1)
-            for j, lstm in enumerate(self.lstm_cells):
+        for _ in range(100):
+            hidden_states = []
+            raw_pred = None
+            raw_out = []
+            # Initial context
+            query = self.linear(self.lstm_cells[2].h0)  # bs * 256, This is the query
+            attn = torch.bmm(query.unsqueeze(1), keys.permute(1, 2, 0))  # bs * 1 * seq_len/8
+            attn = F.softmax(attn, dim=2)
+            context = torch.bmm(attn, values.permute(1, 0, 2)).squeeze(1)
 
-                # First LSTMCell
-                if j == 0:
+            h = self.embed(to_variable(torch.zeros(bs).long()))  # Start token provided for generating the sentence
+            for i in range(self.max_decoding_length):
+                h = torch.cat((h, context), dim=1)
+                for j, lstm in enumerate(self.lstm_cells):
                     if i == 0:
-                        h_x_0, c_x_0 = lstm(h, lstm.h0, lstm.c0)       # bs * 256
-                        hidden_states.append((h_x_0, c_x_0))
-                    else:
-                        h_x_0, c_x_0 = hidden_states[0]
-                        hidden_states[0] = lstm(h, h_x_0, c_x_0)
-                    h = hidden_states[0][0]
-                    # At this point, we get the decoded values at each step :  bs * 256
-                    query = self.linear(h)              # bs * 2048, This is the query
-                    attn = torch.bmm(query.unsqueeze(1), keys.permute(0, 2, 1))         # bs * 1 * seq_len/8
-                    attn = F.softmax(attn, dim=2)
-                    context = torch.bmm(attn, values).squeeze(1)       # bs * 256
-                    h = torch.cat((h, context), dim=1)
-
-                # Remaining 2 LSTMCells
-                else:
-                    if i == 0:
-                        h_x_0, c_x_0 = lstm(h, lstm.h0, lstm.c0)       # bs * 512
+                        h_x_0, c_x_0 = lstm(h, lstm.h0,
+                                            lstm.c0)  # bs * 512
                         hidden_states.append((h_x_0, c_x_0))
                     else:
                         h_x_0, c_x_0 = hidden_states[j]
                         hidden_states[j] = lstm(h, h_x_0, c_x_0)
                     h = hidden_states[j][0]
 
-            # At this point, h is the embed from the 2 lstm cells. Passing it through the projection layers
-            h = self.projection_layer1(h)
-            h = self.non_linear(h)
-            h = self.projection_layer2(h)
+                query = self.linear(h)  # bs * 2048, This is the query
+                attn = torch.bmm(query.unsqueeze(1), keys.permute(1, 2, 0))  # bs * 1 * seq_len/8
+                # attn.data.masked_fill_((1 - mask).unsqueeze(1), -float('inf'))
+                attn = F.softmax(attn, dim=2)
+                context = torch.bmm(attn, values.permute(1, 0, 2)).squeeze(1)  # bs * 256
+                h = torch.cat((h, context), dim=1)
 
-            if self.is_stochastic > 0:
-                gumbel = torch.autograd.Variable(self.sample_gumbel(shape=h.size(), out=h.data.new()))
-                h += gumbel
-            # TODO: Do beam search later
-            h = torch.max(h, dim=1)[1]
-            if h.data.cpu().numpy() == 0:
-                break
-            output.append(h.data.cpu().numpy()[0])
+                # At this point, h is the embed from the 2 lstm cells. Passing it through the projection layers
+                h = self.projection_layer1(h)
+                h = self.non_linear(h)
+                h = self.projection_layer2(h)
+                lsm = self.softmax(h)
+                if self.is_stochastic > 0:
+                    gumbel = torch.autograd.Variable(self.sample_gumbel(shape=h.size(), out=h.data.new()))
+                    h += gumbel
+                # TODO: Do beam search later
 
-            # Primer for next character generation
-            h = self.embed(h)
-        return output
+                h = torch.max(h, dim=1)[1]
+                raw_out.append(h.data.cpu().numpy()[0])
+                if raw_pred is None:
+                    raw_pred = lsm
+                else:
+                    raw_pred = torch.cat((raw_pred, lsm), dim=0)
+
+                if h.data.cpu().numpy() == 0:
+                    break
+
+                # Primer for next character generation
+                h = self.embed(h)
+            output.append(raw_out)
+            raw_preds.append(raw_pred)
+        return output, raw_preds
 
 

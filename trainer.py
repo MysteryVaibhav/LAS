@@ -24,12 +24,13 @@ class Trainer:
     def train(self):
         my_net = self.model
         my_net.apply(self.init_xavier)
+        my_net.load_state_dict(torch.load('models/bestModelWeights_0.15.t7'))
         loss_fn = torch.nn.CrossEntropyLoss()
-        optim = torch.optim.Adam(my_net.parameters(), lr=self.params.learning_rate, weight_decay=self.params.wdecay)
+        optim = torch.optim.ASGD(my_net.parameters(), lr=self.params.learning_rate, weight_decay=self.params.wdecay)
         if torch.cuda.is_available():
             my_net = my_net.cuda()
             loss_fn = loss_fn.cuda()
-
+        
         try:
             prev_best = 100000
             for epoch in range(self.params.num_epochs):
@@ -66,7 +67,7 @@ class Trainer:
                 # anneal lr
                 optim_state = optim.state_dict()
                 optim_state['param_groups'][0]['lr'] = optim_state['param_groups'][0][
-                                                           'lr'] / self.params.learning_anneal
+                                                           'lr'] * self.params.learning_anneal
                 optim.load_state_dict(optim_state)
                 val_loss = self.evaluator.get_val_loss(my_net, loss_fn)
                 print("Epoch {} : Training Loss: {:.5f}, Validation Loss: {:.5f}, Time elapsed {:.2f} mins".
@@ -75,7 +76,7 @@ class Trainer:
                 if val_loss < prev_best:
                     prev_best = val_loss
                     print("Validation loss decreased... saving weights !")
-                    torch.save(my_net.state_dict(), self.params.model_dir+'\\bestModelWeights.t7')
+                    torch.save(my_net.state_dict(), self.params.model_dir+'/bestModelWeights_{:.2f}.t7'.format(val_loss))
                 else:
                     print("Validation loss didn't decrease... not saving !")
 

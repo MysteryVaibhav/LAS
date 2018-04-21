@@ -17,12 +17,15 @@ class DataLoader:
                                   [x.shape[0] for x in self.val] +
                                   [x.shape[0] for x in self.test])
 
+        self.max_transcript_len = np.max([len(x) for x in self.train_transcript] +
+                                  [len(x) for x in self.val_transcript])
+
         # Constructing vocab and charset
-        self.vocab, self.charset = self.get_vocab()
+        self.vocab, self.charset = self.get_vocab(params.use_words)
 
         # Converting transcripts to chars
-        self.train_label = self.char_to_int(self.train_transcript)
-        self.val_label = self.char_to_int(self.val_transcript)
+        self.train_label = self.char_to_int(self.train_transcript, params.use_words)
+        self.val_label = self.char_to_int(self.val_transcript, params.use_words)
 
         # Setting pin memory and number of workers
         kwargs = {'num_workers': 4, 'pin_memory': True} if torch.cuda.is_available() else {}
@@ -40,7 +43,7 @@ class DataLoader:
         self.test_data_loader = torch.utils.data.DataLoader(dataset_test, batch_size=1,
                                                             collate_fn=dataset_test.collate, shuffle=False, **kwargs)
 
-    def get_vocab(self):
+    def get_vocab(self, use_words):
         vocab = []
         charset = {}
         i = 1
@@ -48,6 +51,14 @@ class DataLoader:
         vocab.append('<s>')
         charset['<s>'] = 0
         for each_utterance in self.train_transcript:
+            each_utterance = each_utterance.split(" ") if use_words == 1 else each_utterance
+            for c in each_utterance:
+                if c not in charset:
+                    charset[c] = i
+                    vocab.append(c)
+                    i += 1
+        for each_utterance in self.val_transcript:
+            each_utterance = each_utterance.split(" ") if use_words == 1 else each_utterance
             for c in each_utterance:
                 if c not in charset:
                     charset[c] = i
@@ -55,9 +66,10 @@ class DataLoader:
                     i += 1
         return vocab, charset
 
-    def char_to_int(self, transcripts):
+    def char_to_int(self, transcripts, use_words):
         char_to_int = []
         for transcript in transcripts:
+            transcript = transcript.split(" ") if use_words == 1 else transcript
             # Appending start and stop
             char_to_int.append([0] + [self.charset[c] for c in transcript] + [0])
         return char_to_int
