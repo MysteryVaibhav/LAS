@@ -11,13 +11,21 @@ class DataLoader:
         # Loading data
         self.train = self.expand(np.load(params.data_dir + 'feats40dim_train_original.npy'))
         self.train_transcript = np.load(params.data_dir + 'transcripts_train_original.npy')
-        #self.val_1 = self.expand(np.load(params.data_dir + 'mfcc40dim_test_original.npy'))
-        #self.val_transcript_1 = np.load(params.data_dir + 'transcripts_test_original.npy')
         
         self.train, self.val, self.train_transcript, self.val_transcript = train_test_split(self.train, self.train_transcript,
-                                                                                            test_size=0.2, random_state=42)
+                                                                                            test_size=0.05, random_state=42)
         
-        self.test = self.expand(np.load(params.data_dir + 'mfcc40dim_test_original.npy'))
+        self.train = np.concatenate((self.train, self.expand(np.load(params.data_dir + 'feats40dim_train_speed1.1.npy'))), axis=0)
+        self.train = np.concatenate((self.train, self.expand(np.load(params.data_dir + 'feats40dim_train_speed0.9.npy'))), axis=0)
+        self.train = np.concatenate((self.train, self.expand(np.load(params.data_dir + 'feats40dim_train_temp1.33.npy'))), axis=0)
+        self.train = np.concatenate((self.train, self.expand(np.load(params.data_dir + 'feats40dim_train_temp0.67.npy'))), axis=0)
+        
+        self.train_transcript = np.concatenate((self.train_transcript, self.train_transcript), axis=0)
+        self.train_transcript = np.concatenate((self.train_transcript, self.train_transcript), axis=0)
+        self.train_transcript = np.concatenate((self.train_transcript, self.train_transcript), axis=0)
+        self.train_transcript = np.concatenate((self.train_transcript, self.train_transcript), axis=0)
+        
+        self.test = self.val#self.expand(np.load(params.data_dir + 'mfcc40dim_test_original.npy'))
         self.max_seq_len = np.max([x.shape[0] for x in self.train] +
                                   [x.shape[0] for x in self.val] +
                                   [x.shape[0] for x in self.test])
@@ -49,7 +57,7 @@ class DataLoader:
         #self.val_data_loader_1 = torch.utils.data.DataLoader(dataset_val_1, batch_size=params.batch_size,
         #                                                   collate_fn=dataset_val_1.collate, shuffle=False, **kwargs)
 
-        dataset_test = CustomDataSet(self.val, [], True)
+        dataset_test = CustomDataSet(self.test, [], True)
         self.test_data_loader = torch.utils.data.DataLoader(dataset_test, batch_size=1,
                                                             collate_fn=dataset_test.collate, shuffle=False, **kwargs)
 
