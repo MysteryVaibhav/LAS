@@ -6,6 +6,19 @@ from utils import to_variable, to_tensor
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
 
+class LockedDropout(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, inp, dropout=0.65):
+        if not self.training:
+            return inp
+        tensor_mask = inp.data.new(1, inp.size(1), inp.size(2)).bernoulli_(1 - dropout)
+        var_mask = torch.autograd.Variable(tensor_mask, requires_grad=False) / (1 - dropout)
+        var_mask = var_mask.expand_as(inp)
+        return var_mask * inp
+
+
 class LAS(nn.Module):
     def __init__(self, params, output_size, max_seq_len):
         super(LAS, self).__init__()
@@ -19,16 +32,16 @@ class LAS(nn.Module):
         self.encoder = Encoder(params)      #pBilstm
         self.decoder = Decoder(params, output_size)
 
-    def forward(self, input, input_len, label=None, label_len=None):
-        input = input.permute(1, 0, 2)
+    def forward(self, input, input_len, label=None, label_len=None, tf_rate=None):
         #input = self.cnn_encoder(input)
+        input = input.permute(1, 0, 2)
         keys, values = self.encoder(input, input_len)
         if label is None:
             # During decoding of test data
             return self.decoder.decode(keys, values)
         else:
             # During training
-            return self.decoder(keys, values, label, label_len, input_len)
+            return self.decoder(keys, values, label, label_len, input_len, tf_rate)
 
 
 class CNN_Encoder(nn.Module):
@@ -63,6 +76,7 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
         self.hidden_size = params.hidden_dimension
         self.embedding_dim = params.embedding_dimension
+        #self.locked_dropout = LockedDropout()
         self.n_layers = params.n_layers
         self.lstms = nn.ModuleList([
             nn.LSTM(input_size=params.embedding_dimension, hidden_size=params.hidden_dimension, bidirectional=True),
@@ -81,7 +95,10 @@ class Encoder(nn.Module):
                 seq_len = h.size(0)
                 if seq_len % 2 == 0:
                     h = h.permute(1, 0, 2).contiguous()
+                    # Average pooling
                     h = h.view(h.size(0), h.size(1) // 2, 2, h.size(2)).sum(2) / 2
+                    # Concat pooling
+                    #h = h.view(h.size(0), h.size(1) // 2, h.size(2) * 2)
                     h = h.permute(1, 0, 2).contiguous()
                     input_len /= 2
                 else:
@@ -115,9 +132,11 @@ class Decoder(nn.Module):
     def __init__(self, params, output_size):
         super(Decoder, self).__init__()
         self.vocab = output_size
+        self.use_tf = params.use_tf
         self.hidden_size = params.hidden_dimension
         self.embedding_dim = params.embedding_dimension
         self.is_stochastic = params.is_stochastic
+        #self.locked_dropout = LockedDropout()
         self.max_decoding_length = params.max_decoding_length
         self.embed = nn.Embedding(num_embeddings=output_size, embedding_dim=self.hidden_size)
         self.lstm_cells = nn.ModuleList([
@@ -137,9 +156,10 @@ class Decoder(nn.Module):
         # Tying weights of last layer and embedding layer
         #self.projection_layer2.weight = self.embed.weight
 
-    def forward(self, keys, values, label, label_len, input_len):
+    def forward(self, keys, values, label, label_len, input_len, teacher_force_rate):
         # Number of characters in the transcript
         embed = self.embed(label)          # bs * label_len * 256
+        #embed = self.locked_dropout(embed, 0.1)
         output = None
         hidden_states = []
         # Initial context
@@ -161,7 +181,14 @@ class Decoder(nn.Module):
         context = torch.bmm(attn, values.permute(1, 0, 2)).squeeze(1)
 
         for i in range(label_len.max() - 1):
-            h = embed[:, i, :]                                  # bs * 256
+            if self.use_tf == 1:
+                teacher_force = True
+            else:
+                teacher_force = True if np.random.random_sample() < teacher_force_rate else False
+            if i==0 or teacher_force :
+                h = embed[:, i, :]                                  # bs * 256
+            else:
+                h = self.embed(torch.max(h, dim=1)[1])
             h = torch.cat((h, context), dim=1)                  # bs * 512
             for j, lstm in enumerate(self.lstm_cells):
                 if i == 0:
@@ -210,7 +237,7 @@ class Decoder(nn.Module):
         output = []
         raw_preds = []
 
-        for _ in range(100):
+        for _ in range(3):
             hidden_states = []
             raw_pred = None
             raw_out = []

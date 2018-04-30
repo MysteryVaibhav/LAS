@@ -1,6 +1,7 @@
 import numpy as np
 import torch.utils.data
 from utils import *
+from sklearn.cross_validation import train_test_split 
 
 
 class DataLoader:
@@ -8,11 +9,15 @@ class DataLoader:
         self.params = params
 
         # Loading data
-        self.train = self.expand(np.load(params.data_dir + 'train.npy'))
-        self.train_transcript = np.load(params.data_dir + 'train_transcripts.npy')
-        self.val = self.expand(np.load(params.data_dir + 'dev.npy'))
-        self.val_transcript = np.load(params.data_dir + 'dev_transcripts.npy')
-        self.test = self.expand(np.load(params.data_dir + 'test.npy'))
+        self.train = self.expand(np.load(params.data_dir + 'feats40dim_train_original.npy'))
+        self.train_transcript = np.load(params.data_dir + 'transcripts_train_original.npy')
+        #self.val_1 = self.expand(np.load(params.data_dir + 'mfcc40dim_test_original.npy'))
+        #self.val_transcript_1 = np.load(params.data_dir + 'transcripts_test_original.npy')
+        
+        self.train, self.val, self.train_transcript, self.val_transcript = train_test_split(self.train, self.train_transcript,
+                                                                                            test_size=0.2, random_state=42)
+        
+        self.test = self.expand(np.load(params.data_dir + 'mfcc40dim_test_original.npy'))
         self.max_seq_len = np.max([x.shape[0] for x in self.train] +
                                   [x.shape[0] for x in self.val] +
                                   [x.shape[0] for x in self.test])
@@ -22,10 +27,11 @@ class DataLoader:
 
         # Constructing vocab and charset
         self.vocab, self.charset = self.get_vocab(params.use_words)
-
+        
         # Converting transcripts to chars
         self.train_label = self.char_to_int(self.train_transcript, params.use_words)
         self.val_label = self.char_to_int(self.val_transcript, params.use_words)
+        #self.val_label_1 = self.char_to_int(self.val_transcript_1, params.use_words)
 
         # Setting pin memory and number of workers
         kwargs = {'num_workers': 4, 'pin_memory': True} if torch.cuda.is_available() else {}
@@ -38,8 +44,12 @@ class DataLoader:
         dataset_val = CustomDataSet(self.val, self.val_label, False)
         self.val_data_loader = torch.utils.data.DataLoader(dataset_val, batch_size=params.batch_size,
                                                            collate_fn=dataset_val.collate, shuffle=False, **kwargs)
+        
+        #dataset_val_1 = CustomDataSet(self.val_1, self.val_label_1, False)
+        #self.val_data_loader_1 = torch.utils.data.DataLoader(dataset_val_1, batch_size=params.batch_size,
+        #                                                   collate_fn=dataset_val_1.collate, shuffle=False, **kwargs)
 
-        dataset_test = CustomDataSet(self.test, [], True)
+        dataset_test = CustomDataSet(self.val, [], True)
         self.test_data_loader = torch.utils.data.DataLoader(dataset_test, batch_size=1,
                                                             collate_fn=dataset_test.collate, shuffle=False, **kwargs)
 
