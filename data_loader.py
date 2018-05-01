@@ -15,15 +15,29 @@ class DataLoader:
         self.train, self.val, self.train_transcript, self.val_transcript = train_test_split(self.train, self.train_transcript,
                                                                                             test_size=0.05, random_state=42)
         
-        self.train = np.concatenate((self.train, self.expand(np.load(params.data_dir + 'feats40dim_train_speed1.1.npy'))), axis=0)
-        self.train = np.concatenate((self.train, self.expand(np.load(params.data_dir + 'feats40dim_train_speed0.9.npy'))), axis=0)
-        self.train = np.concatenate((self.train, self.expand(np.load(params.data_dir + 'feats40dim_train_temp1.33.npy'))), axis=0)
-        self.train = np.concatenate((self.train, self.expand(np.load(params.data_dir + 'feats40dim_train_temp0.67.npy'))), axis=0)
+        self.train_transcript_1 = np.load(params.data_dir + 'transcripts_train_original.npy')
+        self.train_1 = self.expand(np.load(params.data_dir + 'feats40dim_train_speed1.1.npy'))
+        self.train_1, _, self.train_transcript_1, _ = train_test_split(self.train_1, self.train_transcript_1, test_size=0.05, random_state=42)
         
-        self.train_transcript = np.concatenate((self.train_transcript, np.load(params.data_dir + 'transcripts_train_original.npy')), axis=0)
-        self.train_transcript = np.concatenate((self.train_transcript, np.load(params.data_dir + 'transcripts_train_original.npy')), axis=0)
-        self.train_transcript = np.concatenate((self.train_transcript, np.load(params.data_dir + 'transcripts_train_original.npy')), axis=0)
-        self.train_transcript = np.concatenate((self.train_transcript, np.load(params.data_dir + 'transcripts_train_original.npy')), axis=0)
+        self.train_transcript_2 = np.load(params.data_dir + 'transcripts_train_original.npy')
+        self.train_2 = self.expand(np.load(params.data_dir + 'feats40dim_train_speed0.9.npy'))
+        self.train_2, _, _, _ = train_test_split(self.train_2, self.train_transcript_2, test_size=0.05, random_state=42)
+        
+        self.train_3 = self.expand(np.load(params.data_dir + 'feats40dim_train_temp1.33.npy'))
+        self.train_3, _, _, _ = train_test_split(self.train_3, self.train_transcript_2, test_size=0.05, random_state=42)
+        
+        self.train_4 = self.expand(np.load(params.data_dir + 'feats40dim_train_temp0.67.npy'))
+        self.train_4, _, _, _ = train_test_split(self.train_4, self.train_transcript_2, test_size=0.05, random_state=42)
+        
+        self.train = np.concatenate((self.train, self.train_1), axis=0)
+        self.train = np.concatenate((self.train, self.train_2), axis=0)
+        self.train = np.concatenate((self.train, self.train_3), axis=0)
+        self.train = np.concatenate((self.train, self.train_4), axis=0)
+        
+        self.train_transcript = np.concatenate((self.train_transcript, self.train_transcript_1), axis=0)
+        self.train_transcript = np.concatenate((self.train_transcript, self.train_transcript_1), axis=0)
+        self.train_transcript = np.concatenate((self.train_transcript, self.train_transcript_1), axis=0)
+        self.train_transcript = np.concatenate((self.train_transcript, self.train_transcript_1), axis=0)
         
         self.test = self.val#self.expand(np.load(params.data_dir + 'mfcc40dim_test_original.npy'))
         self.max_seq_len = np.max([x.shape[0] for x in self.train] +
