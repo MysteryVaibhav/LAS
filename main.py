@@ -12,7 +12,7 @@ def parse_arguments():
     parser.add_argument("--data_dir", dest="data_dir", type=str, default="data_short/data_mfcc/")
 
     parser.add_argument("--hidden_dimension", dest="hidden_dimension", type=int, default=256)
-    parser.add_argument("--embedding_dimension", dest="embedding_dimension", type=int, default=40)
+    parser.add_argument("--embedding_dimension", dest="embedding_dimension", type=int, default=44)
     parser.add_argument("--n_layers", dest="n_layers", type=int, default=1)
 
     parser.add_argument("--batch_size", dest="batch_size", type=int, default=32)
@@ -27,12 +27,12 @@ def parse_arguments():
     parser.add_argument("--max_decoding_length", dest="max_decoding_length", type=int, default=300)
     parser.add_argument("--is_stochastic", dest="is_stochastic", type=int, default=1)
     parser.add_argument("--use_words", dest="use_words", type=int, default=0)
-    parser.add_argument("--use_tf", dest="use_tf", type=int, default=0)
+    parser.add_argument("--use_tf", dest="use_tf", type=int, default=1)
 
     parser.add_argument("--mode", dest="mode", type=int, default=0)
     model_dir_name = 'models'
     parser.add_argument("--model_dir", dest="model_dir", type=str, default=model_dir_name)
-    parser.add_argument("--model_file_name", dest="model_file_name", type=str, default='bestModelWeights_wtf_62.72.t7')
+    parser.add_argument("--model_file_name", dest="model_file_name", type=str, default='bestModelWeights_57.86.t7')
     model_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), model_dir_name)
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
@@ -65,8 +65,7 @@ def main():
         print("Decoding on test set...[OK]")
     elif params.mode == 2:
         wer = evaluator.calc_wer(dl.val_transcript, dl.vocab) 
-        print("Wer: {}".format(wer))
-
+        print("Levenstein dist: {}".format(wer))
 
 if __name__ == '__main__':
     main()

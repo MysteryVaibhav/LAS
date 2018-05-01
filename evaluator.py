@@ -33,14 +33,14 @@ class Evaluator:
         """
         my_net.eval()
         i = 0
-        file = open('submission.csv', 'w')
+        file = open('hypothesis.txt', 'w')
         #file.write("Id,Predicted\n")
         for (input_val, input_len) in self.data_loader.test_data_loader:
             output, raw_preds = my_net(to_variable(input_val), input_len)
             output = self.get_best_out(output, raw_preds)
             pred = [self.data_loader.vocab[idx] for idx in output]
             pred = ''.join(pred)
-            file.write("{},{}\n".format(i, pred))
+            file.write("{}\n".format(pred))
             print("{},{}\n".format(i, pred))
             i += 1
         file.close()
@@ -60,13 +60,16 @@ class Evaluator:
     
     def calc_wer(self, data_loader, char_set):
         i = 0
-        file = open('submission.csv', 'r', encoding='utf-8')
+        file = open('hypothesis.txt', 'r', encoding='utf-8')
         validation_transcripts = []
+        file_ref = open('reference.txt', 'w')
         for j, each in enumerate(data_loader):
             validation_transcripts.append(each)
+            file_ref.write(each + "\n")
+        file_ref.close()
         wer = 0
         for line in file.readlines():
-            ind = L.distance(validation_transcripts[i], line.split(",")[1].strip())
+            ind = L.distance(validation_transcripts[i], line.strip())
             wer += ind
             i += 1
         return wer / i

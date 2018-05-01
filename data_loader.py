@@ -20,10 +20,10 @@ class DataLoader:
         self.train = np.concatenate((self.train, self.expand(np.load(params.data_dir + 'feats40dim_train_temp1.33.npy'))), axis=0)
         self.train = np.concatenate((self.train, self.expand(np.load(params.data_dir + 'feats40dim_train_temp0.67.npy'))), axis=0)
         
-        self.train_transcript = np.concatenate((self.train_transcript, self.train_transcript), axis=0)
-        self.train_transcript = np.concatenate((self.train_transcript, self.train_transcript), axis=0)
-        self.train_transcript = np.concatenate((self.train_transcript, self.train_transcript), axis=0)
-        self.train_transcript = np.concatenate((self.train_transcript, self.train_transcript), axis=0)
+        self.train_transcript = np.concatenate((self.train_transcript, np.load(params.data_dir + 'transcripts_train_original.npy')), axis=0)
+        self.train_transcript = np.concatenate((self.train_transcript, np.load(params.data_dir + 'transcripts_train_original.npy')), axis=0)
+        self.train_transcript = np.concatenate((self.train_transcript, np.load(params.data_dir + 'transcripts_train_original.npy')), axis=0)
+        self.train_transcript = np.concatenate((self.train_transcript, np.load(params.data_dir + 'transcripts_train_original.npy')), axis=0)
         
         self.test = self.val#self.expand(np.load(params.data_dir + 'mfcc40dim_test_original.npy'))
         self.max_seq_len = np.max([x.shape[0] for x in self.train] +
@@ -125,7 +125,7 @@ class CustomDataSet(torch.utils.data.TensorDataset):
         input_lens = np.array([x[1] for x in batch])[sorted_input_seq_len]
         inputs = inputs[sorted_input_seq_len]
         utterance_max_len = np.max(input_lens)
-        padded_input = np.zeros((len(batch), utterance_max_len, 40))
+        padded_input = np.zeros((len(batch), utterance_max_len, 44))
 
         i = 0
         for input in inputs:
