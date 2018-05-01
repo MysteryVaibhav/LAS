@@ -133,6 +133,7 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         self.vocab = output_size
         self.use_tf = params.use_tf
+        self.num_tries = params.num_tries
         self.hidden_size = params.hidden_dimension
         self.embedding_dim = params.embedding_dimension
         self.is_stochastic = params.is_stochastic
@@ -237,7 +238,7 @@ class Decoder(nn.Module):
         output = []
         raw_preds = []
 
-        for _ in range(10):
+        for _ in range(self.num_tries):
             hidden_states = []
             raw_pred = None
             raw_out = []
