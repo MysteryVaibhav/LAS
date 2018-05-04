@@ -29,7 +29,7 @@ class Trainer:
     def train(self):
         my_net = self.model
         my_net.apply(self.init_xavier)
-        #my_net.load_state_dict(torch.load('models/bestModelWeights_1.37.t7'))
+        #my_net.load_state_dict(torch.load('models/bestModelWeights_19.35.t7'))
         loss_fn = torch.nn.CrossEntropyLoss(reduce=False)
         optim = torch.optim.Adam(my_net.parameters(), lr=self.params.learning_rate, weight_decay=self.params.wdecay)
         if torch.cuda.is_available():

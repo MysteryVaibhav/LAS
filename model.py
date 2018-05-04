@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from utils import to_variable, to_tensor
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
+from char_rnn import CharRNN
 
 
 class LockedDropout(nn.Module):
@@ -31,6 +32,10 @@ class LAS(nn.Module):
         self.cnn_encoder = CNN_Encoder(params.embedding_dimension)
         self.encoder = Encoder(params)      #pBilstm
         self.decoder = Decoder(params, output_size)
+        if params.use_lm == 1:
+            self.lm = CharRNN(params.hidden_dimension, 128, output_size + 1, n_layers=3)
+            self.lm.load_state_dict(torch.load('models/bestModel_4.37.t7'))
+            self.decoder.lm = self.lm
 
     def forward(self, input, input_len, label=None, label_len=None, tf_rate=None):
         #input = self.cnn_encoder(input)
@@ -51,12 +56,12 @@ class CNN_Encoder(nn.Module):
             nn.Conv1d(in_channels=40, out_channels=128, kernel_size=3, padding=1),  # Mini-batch * 128 * len
             nn.Hardtanh(0, 20, inplace=True),
             #nn.LeakyReLU(),
-            nn.Dropout(0.3),
+            nn.Dropout(0.2),
             nn.Conv1d(in_channels=128, out_channels=256, kernel_size=3, padding=1),  # Mini-batch * 256 * len
             #nn.BatchNorm1d(256),
             nn.Hardtanh(0, 20, inplace=True),
             #nn.LeakyReLU(),
-            nn.Dropout(0.3),
+            nn.Dropout(0.2),
             nn.Conv1d(in_channels=256, out_channels=embedding_dim, kernel_size=3, padding=1),  # Mini-batch * 256 * len
         ])
 
@@ -111,7 +116,6 @@ class Encoder(nn.Module):
             #h = self.locked_dropout(h, 0.3)
             # Summing forward and backward representation
             h = h.view(h.size(0), h.size(1), 2, -1).sum(2) / 2       # h = ( h_forward + h_backward ) / 2
-
         keys = self.linear_key(h)           # bs * seq_len/8 * 256
         values = self.linear_values(h)      # bs * seq_len/8 * 256
         return keys, values
@@ -133,6 +137,8 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         self.vocab = output_size
         self.use_tf = params.use_tf
+        self.use_lm = params.use_lm
+        self.use_multi_head_attn = params.use_multi_head_attn
         self.num_tries = params.num_tries
         self.hidden_size = params.hidden_dimension
         self.embedding_dim = params.embedding_dimension
@@ -142,12 +148,32 @@ class Decoder(nn.Module):
         self.embed = nn.Embedding(num_embeddings=output_size, embedding_dim=self.hidden_size)
         self.lstm_cells = nn.ModuleList([
             MyLSTM(input_size=2 * self.hidden_size, hidden_size=2 * self.hidden_size),
-            MyLSTM(input_size=2 * self.hidden_size, hidden_size=2 * self.hidden_size),
+            #MyLSTM(input_size=2 * self.hidden_size, hidden_size=2 * self.hidden_size),
             MyLSTM(input_size=2 * self.hidden_size, hidden_size=self.hidden_size)
         ])
 
         # For attention
         self.linear = nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size)
+        if self.use_multi_head_attn == 1:
+            self.v_k_q_1 = nn.ModuleList([nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size // 4),
+                 nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size // 4),
+                 nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size // 4)])
+            self.v_k_q_2 = nn.ModuleList([nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size // 4),
+                 nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size // 4),
+                 nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size // 4)])
+            self.v_k_q_3 = nn.ModuleList([nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size // 4),
+                 nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size // 4),
+                 nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size // 4)])
+            self.v_k_q_4 = nn.ModuleList([nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size // 4),
+                 nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size // 4),
+                 nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size // 4)])
+            self.linears = nn.ModuleList([self.v_k_q_1,
+                                         self.v_k_q_2,
+                                         self.v_k_q_3,
+                                         self.v_k_q_4])
+            self.multi_head_linear = nn.Linear(in_features=self.hidden_size, out_features=self.hidden_size)
+
+        # For character projection
 
         # For character projection
         self.projection_layer1 = nn.Linear(in_features=2 * self.hidden_size, out_features=self.hidden_size)
@@ -155,17 +181,20 @@ class Decoder(nn.Module):
         self.projection_layer2 = nn.Linear(in_features=self.hidden_size, out_features=output_size)
         self.softmax = nn.LogSoftmax(dim=1)
         # Tying weights of last layer and embedding layer
-        #self.projection_layer2.weight = self.embed.weight
+        self.embed.weight = self.projection_layer2.weight# = self.embed.weight
 
     def forward(self, keys, values, label, label_len, input_len, teacher_force_rate):
         # Number of characters in the transcript
         embed = self.embed(label)          # bs * label_len * 256
+
+        # Lm
+        if self.use_lm == 1:
+            hidden_lm = self.lm.init_hidden(label.size()[0])
+            prediction_lm, _ = self.lm(label, hidden_lm)
+            
         #embed = self.locked_dropout(embed, 0.1)
         output = None
         hidden_states = []
-        # Initial context
-        query = self.linear(self.lstm_cells[2].h0.expand(embed.size(0), -1).contiguous())  # bs * 256, This is the query
-        attn = torch.bmm(query.unsqueeze(1), keys.permute(1, 2, 0))  # bs * 1 * seq_len/8
 
         # Create mask
         a = torch.arange(input_len[0]).unsqueeze(0).expand(len(input_len), -1)
@@ -175,12 +204,9 @@ class Decoder(nn.Module):
             mask = torch.autograd.Variable(mask.unsqueeze(1).type(torch.FloatTensor)).cuda()
         else:
             mask = torch.autograd.Variable(mask.unsqueeze(1).type(torch.FloatTensor))
-        #attn.data.masked_fill_((1 - mask).unsqueeze(1), -float('inf'))
-        attn = F.softmax(attn, dim=2)
-        attn = attn * mask
-        attn = attn / attn.sum(2).unsqueeze(2)
-        context = torch.bmm(attn, values.permute(1, 0, 2)).squeeze(1)
-
+            
+        context = self.get_context(self.lstm_cells[1].h0.expand(embed.size(0), -1).contiguous(), keys, values, mask)
+            
         for i in range(label_len.max() - 1):
             if self.use_tf == 1:
                 teacher_force = True
@@ -201,25 +227,53 @@ class Decoder(nn.Module):
                     hidden_states[j] = lstm(h, h_x_0, c_x_0)
                 h = hidden_states[j][0]
             
-            query = self.linear(h)              # bs * 2048, This is the query
-            attn = torch.bmm(query.unsqueeze(1), keys.permute(1, 2, 0))         # bs * 1 * seq_len/8
-            #attn.data.masked_fill_((1 - mask).unsqueeze(1), -float('inf'))
-            attn = F.softmax(attn, dim=2)
-            attn = attn * mask
-            attn = attn / attn.sum(2).unsqueeze(2)
-            context = torch.bmm(attn, values.permute(1, 0, 2)).squeeze(1)       # bs * 256
+            context = self.get_context(h, keys, values, mask)
             h = torch.cat((h, context), dim=1)
 
             # At this point, h is the embed from the 2 lstm cells. Passing it through the projection layers
             h = self.projection_layer1(h)
             h = self.non_linear(h)
-            h = self.softmax(self.projection_layer2(h))
+            h = self.projection_layer2(h)
+            
+            # if use LM
+            if self.use_lm == 1:
+                h = h*3 + prediction_lm[:, i, :-1]
+            
+            h = self.softmax(h)
             # Accumulating the output at each timestep
             if output is None:
                 output = h.unsqueeze(1)
             else:
                 output = torch.cat((output, h.unsqueeze(1)), dim=1)
         return output                         # bs * max_label_seq_len * 33
+    
+    def get_context(self, h, keys, values, mask=None):
+        query = self.linear(h)  # bs * 2048, This is the query
+        if self.use_multi_head_attn == 1:
+            head = None
+            for linear in self.linears:
+                n_keys = linear[0](keys)
+                n_query = linear[1](query)
+                n_values = linear[2](values)
+                attn = torch.bmm(n_query.unsqueeze(1), n_keys.permute(1, 2, 0)) * (1.0 / np.sqrt(self.hidden_size // 4))
+                attn = F.softmax(attn, dim=2)
+                if mask is not None:
+                    attn = attn * mask
+                    attn = attn / attn.sum(2).unsqueeze(2)
+                if head is None:
+                    head = torch.bmm(attn, n_values.permute(1, 0, 2)).squeeze(1)
+                else:
+                    head = torch.cat((head, torch.bmm(attn, n_values.permute(1, 0, 2)).squeeze(1)), dim=1)
+            context = self.multi_head_linear(head)
+        else:
+            attn = torch.bmm(query.unsqueeze(1), keys.permute(1, 2, 0))  # bs * 1 * seq_len/8
+            attn = F.softmax(attn, dim=2)
+            if mask is not None:
+                attn = attn * mask
+                attn = attn / attn.sum(2).unsqueeze(2)
+            context = torch.bmm(attn, values.permute(1, 0, 2)).squeeze(1)
+        return context
+    
     
     def sample_gumbel(self, shape, eps=1e-10, out=None):
         """
@@ -243,12 +297,14 @@ class Decoder(nn.Module):
             raw_pred = None
             raw_out = []
             # Initial context
-            query = self.linear(self.lstm_cells[2].h0)  # bs * 256, This is the query
-            attn = torch.bmm(query.unsqueeze(1), keys.permute(1, 2, 0))  # bs * 1 * seq_len/8
-            attn = F.softmax(attn, dim=2)
-            context = torch.bmm(attn, values.permute(1, 0, 2)).squeeze(1)
-
+            context = self.get_context(self.lstm_cells[1].h0, keys, values)
             h = self.embed(to_variable(torch.zeros(bs).long()))  # Start token provided for generating the sentence
+            
+            if self.use_lm == 1:
+                hidden_lm = self.lm.init_hidden(bs)
+                prediction_lm, _ = self.lm(to_variable((torch.ones(bs) * 66).long().unsqueeze(0)), hidden_lm)
+                prediction_lm = prediction_lm.squeeze(0)
+                
             for i in range(self.max_decoding_length):
                 h = torch.cat((h, context), dim=1)
                 for j, lstm in enumerate(self.lstm_cells):
@@ -261,35 +317,39 @@ class Decoder(nn.Module):
                         hidden_states[j] = lstm(h, h_x_0, c_x_0)
                     h = hidden_states[j][0]
 
-                query = self.linear(h)  # bs * 2048, This is the query
-                attn = torch.bmm(query.unsqueeze(1), keys.permute(1, 2, 0))  # bs * 1 * seq_len/8
-                # attn.data.masked_fill_((1 - mask).unsqueeze(1), -float('inf'))
-                attn = F.softmax(attn, dim=2)
-                context = torch.bmm(attn, values.permute(1, 0, 2)).squeeze(1)  # bs * 256
+                context = self.get_context(h, keys, values)
                 h = torch.cat((h, context), dim=1)
 
                 # At this point, h is the embed from the 2 lstm cells. Passing it through the projection layers
                 h = self.projection_layer1(h)
                 h = self.non_linear(h)
                 h = self.projection_layer2(h)
+                
+                # if use lm
+                if self.use_lm == 1:
+                    h = h*3 + prediction_lm[:, :-1]
+                    
                 lsm = self.softmax(h)
                 if self.is_stochastic > 0:
                     gumbel = torch.autograd.Variable(self.sample_gumbel(shape=h.size(), out=h.data.new()))
                     h += gumbel
                 # TODO: Do beam search later
 
-                h = torch.max(h, dim=1)[1]
-                raw_out.append(h.data.cpu().numpy()[0])
+                h_argmax = torch.max(h, dim=1)[1]
+                raw_out.append(h_argmax.data.cpu().numpy()[0])
                 if raw_pred is None:
                     raw_pred = lsm
                 else:
                     raw_pred = torch.cat((raw_pred, lsm), dim=0)
 
-                if h.data.cpu().numpy() == 0:
+                if h_argmax.data.cpu().numpy() == 0:
                     break
 
                 # Primer for next character generation
-                h = self.embed(h)
+                h = self.embed(h_argmax)
+                if self.use_lm == 1:
+                    prediction_lm, _ = self.lm(h_argmax.unsqueeze(0), hidden_lm)
+                    prediction_lm = prediction_lm.squeeze(0)
             output.append(raw_out)
             raw_preds.append(raw_pred)
         return output, raw_preds
