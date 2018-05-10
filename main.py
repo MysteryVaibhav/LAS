@@ -30,7 +30,10 @@ def parse_arguments():
     parser.add_argument("--use_tf", dest="use_tf", type=int, default=1)
     parser.add_argument("--use_lm", dest="use_lm", type=int, default=0)
     parser.add_argument("--num_tries", dest="num_tries", type=int, default=10)
+    parser.add_argument("--use_stems", dest="use_stems", type=int, default=0)
     parser.add_argument("--use_multi_head_attn", dest="use_multi_head_attn", type=int, default=0)
+    parser.add_argument("--use_beam_decode", dest="use_beam_decode", type=int, default=0)
+    parser.add_argument("--plot", dest="plot", type=int, default=0)
 
     parser.add_argument("--mode", dest="mode", type=int, default=0)
     model_dir_name = 'models'

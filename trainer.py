@@ -6,6 +6,7 @@ from timeit import default_timer as timer
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib import cm
 #from logger import *
 
 
@@ -15,6 +16,7 @@ class Trainer:
         #self.logger = Logger('./logs')
         self.data_loader = data_loader
         self.evaluator = evaluator
+        self.plot = params.plot
         self.model = LAS(params, len(data_loader.vocab), data_loader.max_seq_len)
 
     @staticmethod
@@ -29,7 +31,7 @@ class Trainer:
     def train(self):
         my_net = self.model
         my_net.apply(self.init_xavier)
-        #my_net.load_state_dict(torch.load('models/bestModelWeights_19.35.t7'))
+        my_net.load_state_dict(torch.load('models/bestModelWeights_MHA_19.35.t7'))
         loss_fn = torch.nn.CrossEntropyLoss(reduce=False)
         optim = torch.optim.Adam(my_net.parameters(), lr=self.params.learning_rate, weight_decay=self.params.wdecay)
         if torch.cuda.is_available():
@@ -44,11 +46,25 @@ class Trainer:
                 losses = []
                 start_time = timer()
                 minibatch = 1
+                i = 0
                 tf_rate = 0.9 - (0.9 - 0)*(epoch/10)
                 for (input_val, input_len, label, label_len, label_mask) in self.data_loader.train_data_loader:
                     optim.zero_grad()  # Reset the gradients
                     my_net.train()
                     label = to_variable(label)
+                    
+                    if i == 0 and self.plot == 1:
+                        mat = np.matrix(input_val[0, :, :].numpy().T)
+                        fig = plt.figure()
+                        #plt.imshow(mat, interpolation='nearest', cmap=cm.gist_rainbow, origin='lower')
+                        plt.imshow(mat, interpolation='nearest', cmap=cm.gist_ncar, origin='lower')
+                        #plt.imshow(mat)
+                        #plt.colorbar()
+                        plt.xlabel('sequence length')
+                        plt.ylabel('feature dimension')
+                        fig.savefig('sample.png')
+                        i = i + 1
+                    
                     prediction = my_net(to_variable(input_val), input_len, label, label_len, tf_rate)  # Feed forward
                     
                     # Use prediction and compute the loss carefully
@@ -70,8 +86,10 @@ class Trainer:
                     optim.step()  # Update the network
 
                     losses.append(loss.data.cpu().numpy())
-                    if (minibatch - 1) % 70 == 0:
+                    if (minibatch - 1) % 200 == 0:
                         plot_losses.append(loss.data.cpu().numpy())
+#                         val_loss = self.evaluator.get_val_loss(my_net, loss_fn, self.data_loader.val_data_loader, tf_rate)
+#                         val_losses_1.append(val_loss)
                         #logger.scalar_summary('Training Loss', loss.data.cpu().numpy(), len(plot_losses))
                     
                     sys.stdout.write("[%d/%d] :: Training Loss: %f   \r" % (
@@ -103,10 +121,11 @@ class Trainer:
             # Plot 1
             fig = plt.figure()
             plt.plot(range(0, len(plot_losses)), plot_losses, color='b', label='train loss')
+            plt.plot(range(0, len(val_losses_1)), val_losses_1, color='r', label='val loss')
             plt.ylabel('loss')
-            plt.xlabel('per 70 mini batch')
+            plt.xlabel('per 200 mini batch')
             plt.legend()
-            fig.savefig('train_loss.png')
+            fig.savefig('train_val_loss.png')
             
             # Plot 2
             fig = plt.figure()

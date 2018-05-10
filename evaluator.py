@@ -7,6 +7,7 @@ class Evaluator:
     def __init__(self, params, data_loader):
         self.params = params
         self.data_loader = data_loader
+        self.use_stems = params.use_stems
 
     def get_val_loss(self, my_net, loss_fn, data_loader, tf_rate):
         losses = []
@@ -61,19 +62,37 @@ class Evaluator:
     def calc_wer(self, data_loader, char_set):
         i = 0
         file = open('hypothesis.txt', 'r', encoding='utf-8')
+        file_stem = open('hypothesis_stem.txt', 'w', encoding='utf-8')
         validation_transcripts = []
         file_ref = open('reference.txt', 'w')
+        file_stem_ref = open('reference_stem.txt', 'w')
         for j, each in enumerate(data_loader):
-            validation_transcripts.append(each)
             file_ref.write(each + "\n")
+            if self.use_stems == 1:
+                each = self.get_stems(each)
+                file_stem_ref.write(each + "\n")
+            validation_transcripts.append(each)
         file_ref.close()
+        file_stem_ref.close()
         wer = 0
         for line in file.readlines():
+            if self.use_stems == 1:
+                line = self.get_stems(line)
+                file_stem.write(line + "\n")
             ind = L.distance(validation_transcripts[i], line.strip())
             wer += ind
             i += 1
+        file_stem.close()
         return wer / i
-
+    
+    def get_stems(self, sentence):
+        n = ''
+        for word in sentence.strip().split(" "):
+            if len(word) > 4:
+                n += word[:len(word) - 3] + ' '
+            else:
+                n += word + ' '
+        return n.strip()
 
 class Node:
     def __init__(self, char, prob, children=[]):
